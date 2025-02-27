@@ -3,7 +3,8 @@ import { parse as parseNBT } from "prismarine-nbt";
 import * as THREE from "three";
 import { program } from "commander";
 import path from "path";
-import { GLTFExporter } from "node-three-gltf";
+import { GLTFExporter, TextureLoader } from "node-three-gltf";
+import { cwd } from "process";
 
 // Ensure temp directory exists
 const tempDir = path.join(process.cwd(), "temp");
@@ -95,10 +96,6 @@ program
                 blockSize
             );
 
-            // TODO: Get pack, fill out materials according to blocks.
-            // Currently all materials are white.
-            const materials: Record<string, THREE.Material> = {};
-
             // fs.writeFileSync(
             //     path.join(process.cwd(), "temp", "thing.json"),
             //     JSON.stringify(palette, null, 2)
@@ -123,14 +120,36 @@ program
                 if (!blockData || !blockData.name) return;
 
                 // TODO: Material Fixes (Currently everything is just white)
-                const blockName = blockData.name.value;
-                if (!materials[blockName]) {
-                    materials[blockName] = new THREE.MeshStandardMaterial({
-                        color: 0xffffff, // If no material is specified, make it white.
-                    });
-                }
+                const blockName: string = blockData.name.value;
 
-                const material = materials[blockName];
+                if (
+                    !fs.existsSync(
+                        path.join(
+                            cwd(),
+                            "assets",
+                            "textures",
+                            "block",
+                            `${blockName.slice(10)}.png`
+                        )
+                    )
+                )
+                    console.error(
+                        `[❌] Texture for ${blockName.slice(10)} not found.`
+                    );
+
+                // THIS CODE DOES NOT WORK DO NOT TOUCH
+                const texture = new TextureLoader().load(
+                    path.join(
+                        cwd(),
+                        "assets",
+                        "textures",
+                        "block",
+                        `${blockName.slice(10)}.png`
+                    )
+                );
+                const material = new THREE.MeshStandardMaterial({
+                    map: texture,
+                });
                 const mesh = new THREE.Mesh(geometry, material);
 
                 // Compute Coordinates in the 3D Plane.
@@ -146,13 +165,8 @@ program
                     console.error(`[⚠️] Air detected while adding blocks.`);
                 }
 
-                const _x = y;
-                const _y = z;
-                const _z = x;
-
                 // Add it to the 3D Scene
                 mesh.position.set(x, y, z);
-                // mesh.position.set(_x, _y, _z);
                 scene.add(mesh);
                 addedBlocks++;
             });
