@@ -18,7 +18,9 @@ program
     .argument("<output>", "Output .glb file")
     .action(async (input, output) => {
         try {
-            console.log(`📂 Reading file: ${input}`);
+            console.log(`---- [📌] Program Logs Start Here ----\n`);
+
+            console.log(`[🟡] 📂 Reading file: ${input}\n`);
             const buffer = fs.readFileSync(input);
             const { parsed } = await parseNBT(buffer);
             const root = parsed.value;
@@ -48,9 +50,10 @@ program
                 );
             }
 
+            // width: x | height: y | depth: z //
             const [width, height, depth] = size;
             console.log(
-                `[DEBUG] Structure size: ${width} x ${height} x ${depth}`
+                `[🔍] Raw Size: ${size}\n Structure size: ${width} x ${height} x ${depth}\n`
             );
 
             // Extract block indices
@@ -71,14 +74,14 @@ program
 
             if (!Array.isArray(palette)) {
                 console.error(
-                    "[❌] Invalid or missing block_palette. Debug:",
+                    "[❌] Invalid or missing block_palette. 🔍:",
                     palette
                 );
                 return;
             }
 
             console.log(
-                `[DEBUG] Extracted palette list: ${palette.length} blocks`
+                `[🔍] Extracted palette list: ${palette.length} blocks\n`
             );
 
             // Setup Three.js scene
@@ -91,37 +94,70 @@ program
                 blockSize,
                 blockSize
             );
+
+            // TODO: Get pack, fill out materials according to blocks.
+            // Currently all materials are white.
             const materials: Record<string, THREE.Material> = {};
 
+            // fs.writeFileSync(
+            //     path.join(process.cwd(), "temp", "thing.json"),
+            //     JSON.stringify(palette, null, 2)
+            // );
+
             let addedBlocks = 0;
-
+            // Position each block properly in the 3D Plane/Scene
             blockIndices.forEach((blockIndex, i) => {
-                if (blockIndex === -1 || blockIndex >= palette.length) return;
+                const airIndex = palette.findIndex(
+                    (block) => block.name?.value === "minecraft:air"
+                );
+                // Ignore air blocks
+                if (
+                    blockIndex === airIndex ||
+                    blockIndex >= palette.length ||
+                    blockIndex === -1
+                )
+                    return;
 
+                // Get block's data
                 const blockData = palette[blockIndex];
                 if (!blockData || !blockData.name) return;
 
+                // TODO: Material Fixes (Currently everything is just white)
                 const blockName = blockData.name.value;
                 if (!materials[blockName]) {
                     materials[blockName] = new THREE.MeshStandardMaterial({
-                        color: Math.random() * 0xffffff, // Random color per block type
+                        color: 0xffffff, // If no material is specified, make it white.
                     });
                 }
 
                 const material = materials[blockName];
                 const mesh = new THREE.Mesh(geometry, material);
 
-                // Compute 3D position
-                const x = i % width;
-                const y = Math.floor(i / (width * depth)) % height;
-                const z = Math.floor(i / (width * height));
+                // Compute Coordinates in the 3D Plane.
+                const x = Math.floor(i / (depth * height)) % width;
+                const y = Math.floor(i / depth) % height;
+                const z = i % depth;
 
+                // console.log(
+                //     `[🔍] Block ${blockName} (${blockIndex}) at i=${i} → (x: ${x}, y: ${y}, z: ${z})`
+                // );
+
+                if (blockName === "minecraft:air") {
+                    console.error(`[⚠️] Air detected while adding blocks.`);
+                }
+
+                const _x = y;
+                const _y = z;
+                const _z = x;
+
+                // Add it to the 3D Scene
                 mesh.position.set(x, y, z);
+                // mesh.position.set(_x, _y, _z);
                 scene.add(mesh);
                 addedBlocks++;
             });
 
-            console.log(`[DEBUG] Added ${addedBlocks} blocks to scene.`);
+            console.log(`[🔍] Added ${addedBlocks} blocks to scene.\n`);
 
             // Export to GLB
             const exporter = new GLTFExporter();
@@ -130,7 +166,9 @@ program
             });
             fs.writeFileSync(output, glbBuffer);
 
-            console.log(`[DEBUG] Exported to ${output}`);
+            console.log(`[✅] Exported to ${output}\n`);
+
+            console.log(`---- [📌] Program Logs End Here ----`);
         } catch (error) {
             console.error("[❌] Error processing .mcstructure:", error);
         }
