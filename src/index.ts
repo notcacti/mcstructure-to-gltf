@@ -92,7 +92,7 @@ program
                 depth
             );
 
-            // 🚀 Export after all blocks are processed
+            // Export after all blocks are processed
             console.log(`[🟡] Exporting GLB...`);
             const exporter = new GLTFExporter();
             const glbBuffer = await exporter.parseAsync(scene, {
@@ -173,7 +173,7 @@ async function getBlockMaterial(
 
     if (!fs.existsSync(modelPath)) {
         console.error(`[❌] Model for ${blockName} not found.`);
-        return new THREE.MeshStandardMaterial({ color: 0xffffff }); // Default white material
+        return new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Red material to let you know it's a dead block
     }
 
     const modelData: Record<string, string> = JSON.parse(
