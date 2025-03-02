@@ -5,6 +5,7 @@ import { program } from "commander";
 import path from "path";
 import { GLTFExporter, TextureLoader } from "node-three-gltf";
 import { cwd } from "process";
+import { Canvas, createCanvas, loadImage } from "canvas";
 
 // Ensure temp directory exists
 const tempDir = path.join(process.cwd(), "temp");
@@ -166,10 +167,27 @@ async function processBlocks(
     console.log(`[🔍] Added ${addedBlocks} blocks to scene.\n`);
 }
 
+async function colorizeTexture(texturePath: string, hexColor: string) {
+    const image = await loadImage(texturePath);
+    const canvas = createCanvas(image.width, image.height);
+    const ctx = canvas.getContext("2d");
+
+    ctx.drawImage(image, 0, 0);
+
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = hexColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(image, 0, 0);
+
+    fs.writeFileSync(texturePath, canvas.toBuffer());
+}
+
 async function getBlockMaterial(
     blockName: string
 ): Promise<THREE.MeshStandardMaterial[]> {
-    blockName.replace("minecraft:", "");
+    blockName = blockName.replace("minecraft:", "");
     const modelPath = path.join(
         cwd(),
         "assets",
@@ -186,8 +204,45 @@ async function getBlockMaterial(
     }
 
     const modelData = JSON.parse(fs.readFileSync(modelPath, "utf-8"));
-    const textureMap: Record<string, THREE.Texture> = {};
 
+    const textureMap: Map<string, THREE.Texture> = new Map(); // "east" => MeshTexture ...
+
+    // Relavant code starts from here
+    const materials: THREE.MeshStandardMaterial[] = [];
+
+    const addMaterials = () => {
+        const faceMap = {
+            up: 2,
+            down: 3,
+            north: 4,
+            south: 5,
+            east: 0,
+            west: 1,
+        } as const;
+
+        for (const [face, faceIndex] of Object.entries(faceMap)) {
+            const texture = textureMap.get(face);
+            materials[faceIndex] = new THREE.MeshStandardMaterial({
+                map: texture,
+            });
+        }
+    };
+
+    // Special case for grass
+    if (blockName === "grass_block") {
+        await colorizeTexture(
+            path.join(
+                cwd(),
+                "assets",
+                "textures",
+                "block",
+                `grass_block_top.png`
+            ),
+            "#6ab744"
+        );
+    }
+
+    // Loading all textures
     if (modelData.textures) {
         for (const [key, textureName] of Object.entries<string>(
             modelData.textures
@@ -202,54 +257,62 @@ async function getBlockMaterial(
 
             if (fs.existsSync(texturePath)) {
                 const textureLoader = new TextureLoader();
-                textureMap[key] = await textureLoader.loadAsync(texturePath);
-                if (key === "all") {
-                    const materials = Array<THREE.MeshStandardMaterial>(6).fill(
-                        new THREE.MeshStandardMaterial({
-                            map: textureMap[key],
-                        })
-                    );
-
-                    return materials;
-                }
+                const texture = await textureLoader.loadAsync(texturePath);
+                texture.magFilter = THREE.NearestFilter;
+                texture.minFilter = THREE.NearestFilter;
+                textureMap.set(key, texture); // "end", "bottom", etc => MeshTexture
             } else {
                 console.error(`[❌] Missing texture: ${cleanTexture}.png`);
             }
         }
     }
 
-    const materials: THREE.MeshStandardMaterial[] = [];
+    // Updating texture keys.
+    let parent = modelData.parent.replace("minecraft:", "");
+    let parentData = modelData;
 
-    const parent = modelData.parent.replace("minecraft:", "");
-    if (parent === "block/block") {
-        const faceMap = {
-            up: 2,
-            down: 3,
-            north: 4,
-            south: 5,
-            east: 0,
-            west: 1,
-        } as const;
-        for (const [face, data] of Object.entries<Record<string, string>>(
-            element.faces
-        )) {
-            if (data.texture && data.texture.startsWith("#")) {
-                const textureKey = data.texture.slice(1); // Remove `#`
-                if (face in faceMap) {
-                    const faceIndex = faceMap[face as keyof typeof faceMap];
-                    if (textureMap[textureKey]) {
-                        materials[faceIndex] = new THREE.MeshStandardMaterial({
-                            map: textureMap[textureKey],
-                        });
-                    }
-                }
+    while (parent) {
+        if (parentData.elements) {
+            for (const [key, data] of Object.entries<Record<string, string>>(
+                parentData.elements[0].faces
+            )) {
+                const textureReference = data.texture.slice(1); // Remove '#'
+                const texture = textureMap.get(textureReference);
+                textureMap.set(key, texture);
+            }
+
+            break;
+        }
+        const parentPath = path.join(
+            cwd(),
+            "assets",
+            "models",
+            `${parent}.json`
+        );
+        parentData = JSON.parse(fs.readFileSync(parentPath, "utf-8"));
+
+        if (parentData.textures) {
+            for (const [key, _textureReference] of Object.entries<string>(
+                parentData.textures
+            )) {
+                const textureReference = _textureReference.slice(1); // Remove '#'
+                const texture = textureMap.get(textureReference);
+                textureMap.set(key, texture);
             }
         }
+
+        // console.log(
+        //     "After",
+        //     textureMap.keys(),
+        //     "In-Parent & Out-Parent",
+        //     parent,
+        //     parentData.parent.replace("minecraft:", "")
+        // );
+
+        parent = parentData.parent?.replace("minecraft:", "") ?? undefined;
     }
 
-    const parentInfo = JSON.parse(fs.readFileSync(modelPath, "utf-8"));
-
-    const textureFaces = ["down", "up", "north", "south", "east", "west"];
+    addMaterials();
 
     // if (modelData.elements) {
     //     for (const element of modelData.elements) {
