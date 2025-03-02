@@ -290,52 +290,10 @@ async function getBlockMaterial(
             }
         }
 
-        // console.log(
-        //     "After",
-        //     textureMap.keys(),
-        //     "In-Parent & Out-Parent",
-        //     parent,
-        //     parentData.parent.replace("minecraft:", "")
-        // );
-
         parent = parentData.parent?.replace("minecraft:", "") ?? undefined;
     }
 
     addMaterials();
-
-    // if (modelData.elements) {
-    //     for (const element of modelData.elements) {
-    //         // if (element.faces) {
-    //         //     // const faceMap = {
-    //         //     //     up: 2,
-    //         //     //     down: 3,
-    //         //     //     north: 4,
-    //         //     //     south: 5,
-    //         //     //     east: 0,
-    //         //     //     west: 1,
-    //         //     // } as const;
-    //         //     // for (const [face, data] of Object.entries<
-    //         //     //     Record<string, string>
-    //         //     // >(element.faces)) {
-    //         //     //     if (data.texture && data.texture.startsWith("#")) {
-    //         //     //         const textureKey = data.texture.slice(1); // Remove `#`
-    //         //     //         if (face in faceMap) {
-    //         //     //             const faceIndex =
-    //         //     //                 faceMap[face as keyof typeof faceMap];
-    //         //     //             if (textureMap[textureKey]) {
-    //         //     //                 materials[faceIndex] =
-    //         //     //                     new THREE.MeshStandardMaterial({
-    //         //     //                         map: textureMap[textureKey],
-    //         //     //                     });
-    //         //     //             }
-    //         //     //         }
-    //         //     //     }
-    //         //     // }
-    //         //     if (element.)
-    //         // }
-
-    //     }
-    // }
 
     return materials;
 }
