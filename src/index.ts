@@ -191,6 +191,7 @@ async function getBlockMaterial(
     const modelPath = path.join(
         cwd(),
         "assets",
+        "minecraft",
         "models",
         "block",
         `${blockName}.json`
@@ -228,20 +229,6 @@ async function getBlockMaterial(
         }
     };
 
-    // Special case for grass
-    if (blockName === "grass_block") {
-        await colorizeTexture(
-            path.join(
-                cwd(),
-                "assets",
-                "textures",
-                "block",
-                `grass_block_top.png`
-            ),
-            "#6ab744"
-        );
-    }
-
     // Loading all textures
     if (modelData.textures) {
         for (const [key, textureName] of Object.entries<string>(
@@ -251,6 +238,7 @@ async function getBlockMaterial(
             const texturePath = path.join(
                 cwd(),
                 "assets",
+                "minecraft",
                 "textures",
                 `${cleanTexture}.png`
             );
@@ -268,7 +256,7 @@ async function getBlockMaterial(
     }
 
     // Updating texture keys.
-    let parent = modelData.parent.replace("minecraft:", "");
+    let parent = modelData.parent?.replace("minecraft:", "");
     let parentData = modelData;
 
     while (parent) {
@@ -286,6 +274,7 @@ async function getBlockMaterial(
         const parentPath = path.join(
             cwd(),
             "assets",
+            "minecraft",
             "models",
             `${parent}.json`
         );
