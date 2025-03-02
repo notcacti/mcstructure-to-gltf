@@ -106,6 +106,19 @@ program
         }
     });
 
+const materialCache = new Map<string, THREE.MeshStandardMaterial[]>();
+
+async function getMaterials(
+    blockName: string
+): Promise<THREE.MeshStandardMaterial[]> {
+    blockName = blockName.replace("minecraft:", "");
+    if (!materialCache.has(blockName)) {
+        const materials = await getBlockMaterial(blockName);
+        materialCache.set(blockName, materials);
+    }
+    return materialCache.get(blockName)!;
+}
+
 async function processBlocks(
     scene: THREE.Scene,
     blockIndices: any,
@@ -132,8 +145,11 @@ async function processBlocks(
         if (!blockData || !blockData.name) continue;
 
         const blockName = blockData.name.value;
-        const material = await getBlockMaterial(blockName);
-        if (!material) continue;
+        const material = await getMaterials(blockName);
+        if (!material) {
+            console.error(`[❌] Material loading failed for ${blockName}`);
+            continue;
+        }
 
         const mesh = new THREE.Mesh(geometry, material);
 
@@ -152,8 +168,8 @@ async function processBlocks(
 
 async function getBlockMaterial(
     blockName: string
-): Promise<THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[] | null> {
-    blockName = blockName.slice(10); // Remove the "minecraft:" prefix.
+): Promise<THREE.MeshStandardMaterial[]> {
+    blockName.replace("minecraft:", "");
     const modelPath = path.join(
         cwd(),
         "assets",
@@ -162,65 +178,114 @@ async function getBlockMaterial(
         `${blockName}.json`
     );
 
-    const foliage = ["tall_grass", "fern"];
-
-    if (foliage.includes(blockName)) {
-        console.warn(
-            `[🍃] Foliage such as ${blockName} is not currently supported. Skipping.`
-        );
-        return null;
-    }
-
     if (!fs.existsSync(modelPath)) {
-        console.error(`[❌] Model for ${blockName} not found.`);
-        return new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Red material to let you know it's a dead block
+        console.warn(`[⚠️] Model for ${blockName} not found, using default.`);
+        return Array(6).fill(
+            new THREE.MeshStandardMaterial({ color: 0xff0000 })
+        );
     }
 
-    const modelData: Record<string, string> = JSON.parse(
-        fs.readFileSync(modelPath, "utf-8")
-    );
+    const modelData = JSON.parse(fs.readFileSync(modelPath, "utf-8"));
     const textureMap: Record<string, THREE.Texture> = {};
 
-    // Load textures based on model definition
     if (modelData.textures) {
-        for (const [key, _textureName] of Object.entries<string>(
+        for (const [key, textureName] of Object.entries<string>(
             modelData.textures
         )) {
-            let textureName: string = _textureName;
-
-            if (_textureName.startsWith("minecraft:"))
-                textureName = _textureName.slice(10);
-
+            let cleanTexture = textureName.replace("minecraft:", "");
             const texturePath = path.join(
                 cwd(),
                 "assets",
                 "textures",
-                `${textureName}.png`
+                `${cleanTexture}.png`
             );
+
             if (fs.existsSync(texturePath)) {
                 const textureLoader = new TextureLoader();
                 textureMap[key] = await textureLoader.loadAsync(texturePath);
+                if (key === "all") {
+                    const materials = Array<THREE.MeshStandardMaterial>(6).fill(
+                        new THREE.MeshStandardMaterial({
+                            map: textureMap[key],
+                        })
+                    );
+
+                    return materials;
+                }
             } else {
-                console.warn(`[⚠️] Texture ${textureName}.png not found.`);
+                console.error(`[❌] Missing texture: ${cleanTexture}.png`);
             }
         }
     }
 
-    // If the model has specific faces, create a material array
-    if (modelData.elements) {
-        const materials: THREE.MeshStandardMaterial[] = [];
+    const materials: THREE.MeshStandardMaterial[] = [];
 
-        const faceMap = ["bottom", "top", "north", "south", "west", "east"];
-        for (const face of faceMap) {
-            materials.push(
-                new THREE.MeshStandardMaterial({
-                    map: textureMap[face] || textureMap["side"] || null,
-                })
-            );
+    const parent = modelData.parent.replace("minecraft:", "");
+    if (parent === "block/block") {
+        const faceMap = {
+            up: 2,
+            down: 3,
+            north: 4,
+            south: 5,
+            east: 0,
+            west: 1,
+        } as const;
+        for (const [face, data] of Object.entries<Record<string, string>>(
+            element.faces
+        )) {
+            if (data.texture && data.texture.startsWith("#")) {
+                const textureKey = data.texture.slice(1); // Remove `#`
+                if (face in faceMap) {
+                    const faceIndex = faceMap[face as keyof typeof faceMap];
+                    if (textureMap[textureKey]) {
+                        materials[faceIndex] = new THREE.MeshStandardMaterial({
+                            map: textureMap[textureKey],
+                        });
+                    }
+                }
+            }
         }
-
-        return materials;
     }
+
+    const parentInfo = JSON.parse(fs.readFileSync(modelPath, "utf-8"));
+
+    const textureFaces = ["down", "up", "north", "south", "east", "west"];
+
+    // if (modelData.elements) {
+    //     for (const element of modelData.elements) {
+    //         // if (element.faces) {
+    //         //     // const faceMap = {
+    //         //     //     up: 2,
+    //         //     //     down: 3,
+    //         //     //     north: 4,
+    //         //     //     south: 5,
+    //         //     //     east: 0,
+    //         //     //     west: 1,
+    //         //     // } as const;
+    //         //     // for (const [face, data] of Object.entries<
+    //         //     //     Record<string, string>
+    //         //     // >(element.faces)) {
+    //         //     //     if (data.texture && data.texture.startsWith("#")) {
+    //         //     //         const textureKey = data.texture.slice(1); // Remove `#`
+    //         //     //         if (face in faceMap) {
+    //         //     //             const faceIndex =
+    //         //     //                 faceMap[face as keyof typeof faceMap];
+    //         //     //             if (textureMap[textureKey]) {
+    //         //     //                 materials[faceIndex] =
+    //         //     //                     new THREE.MeshStandardMaterial({
+    //         //     //                         map: textureMap[textureKey],
+    //         //     //                     });
+    //         //     //             }
+    //         //     //         }
+    //         //     //     }
+    //         //     // }
+    //         //     if (element.)
+    //         // }
+
+    //     }
+    // }
+
+    return materials;
 }
 
 program.parse(process.argv);
